@@ -85,17 +85,18 @@ st.markdown("Monitor and analyze user interactions with the Gemini AI agent.")
 
 # --- DATA LOADING ---
 with st.spinner("Loading data from remote database..."):
-    # Initial query to fetch prompts
-    # We select specific columns to be efficient
+    # Updated query with JOIN to fetch user details
     query = """
         SELECT 
-            id,
-            user_id,
-            session_id,
-            prompt_text,
-            created_at
-        FROM chat_prompts
-        ORDER BY created_at DESC
+            cp.user_id,
+            u.first_name as username,
+            u.email,
+            cp.prompt_text,
+            cp.session_id,
+            cp.created_at
+        FROM chat_prompts cp
+        JOIN users u ON cp.user_id = u.id
+        ORDER BY cp.created_at DESC
         LIMIT 1000
     """
     df = load_data(query)
@@ -139,29 +140,35 @@ if df is not None and not df.empty:
     st.markdown("### 📝 Recent Prompts")
     
     # Search filter
-    search_term = st.text_input("Search prompts...", placeholder="Type to filter by prompt text...")
+    search_term = st.text_input("Search prompts...", placeholder="Type to filter by prompt text, user or email...")
     
     if search_term:
-        filtered_df = df[df['prompt_text'].astype(str).str.contains(search_term, case=False, na=False)]
+        # Search in multiple columns
+        mask = (
+            df['prompt_text'].astype(str).str.contains(search_term, case=False, na=False) |
+            df['username'].astype(str).str.contains(search_term, case=False, na=False) |
+            df['email'].astype(str).str.contains(search_term, case=False, na=False)
+        )
+        filtered_df = df[mask]
     else:
         filtered_df = df
 
+    # Requested order: User ID, username, email, Prompt, Session ID, Timestamp
     st.dataframe(
         filtered_df,
+        column_order=("user_id", "username", "email", "prompt_text", "session_id", "created_at"),
         column_config={
+            "user_id": st.column_config.TextColumn("User ID"),
+            "username": st.column_config.TextColumn("Username"),
+            "email": st.column_config.TextColumn("Email"),
+            "prompt_text": st.column_config.TextColumn("Prompt", width="large"),
+            "session_id": st.column_config.TextColumn("Session ID"),
             "created_at": st.column_config.DatetimeColumn(
                 "Timestamp",
                 format="D MMM YYYY, h:mm a",
-            ),
-            "prompt_text": st.column_config.TextColumn(
-                "Prompt",
-                width="large"
-            ),
-            "user_id": "User ID",
-            "session_id": "Session ID",
-            "id": None # Hide internal ID
+            )
         },
-        use_container_width=True,
+        width="stretch",
         hide_index=True,
         height=600
     )
